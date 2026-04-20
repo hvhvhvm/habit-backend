@@ -9,18 +9,25 @@ from app.models import User
 from fastapi.middleware.cors import CORSMiddleware
 from app.models import HabitLog
 from datetime import datetime, date
+import os
 
 
 app = FastAPI()
 
-origins = [
+default_origins = [
     "http://localhost:5173",  # local dev
     "https://habit-frontend-3rz4-c9nniy5mg.vercel.app",  # your Vercel app
+]
+origins = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", ",".join(default_origins)).split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
