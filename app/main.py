@@ -12,9 +12,15 @@ from datetime import datetime, date
 
 
 app = FastAPI()
+
+origins = [
+    "http://localhost:5173",  # local dev
+    "https://habit-frontend-3rz4-c9nniy5mg.vercel.app",  # your Vercel app
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # your frontend
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
