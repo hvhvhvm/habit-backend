@@ -22,11 +22,12 @@ class Habit(Base):
     target_value = Column(Integer)
     scheduled_time = Column(Time, nullable=True)
     category = Column(String, nullable=True)
+    points = Column(Integer, default=10)
 
     user_id = Column(Integer, ForeignKey("users.id"))
 
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
     repeat = Column(String)   
     days = Column(JSON)
     is_session = Column(Boolean, default=False)
@@ -72,6 +73,6 @@ class HabitLog(Base):
 
     value_completed = Column(Integer, default=0)
 
-    completed_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, default=datetime.now)
 
     habit = relationship("Habit", back_populates="logs")

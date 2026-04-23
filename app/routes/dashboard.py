@@ -19,7 +19,11 @@ def get_dashboard(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return get_dashboard_data(db, current_user.id)
+    
+    data = get_dashboard_data(db, current_user.id)
+
+    return data
+    
 @router.get("/habits/{habit_id}/test")
 def test_habit(habit_id: int, db: Session = Depends(get_db)):
     data = get_last_7_days_data(db, habit_id)

@@ -3,7 +3,7 @@ from app.models import User,Habit,HabitLog,SubHabit
 from app.schemas import HabitCreate,HabitLogCreate,HabitUpdate,SubHabitCreate
 from datetime import datetime, date, timedelta
 from sqlalchemy import func
-from datetime import datetime, timedelta,date
+from datetime import datetime, timedelta,date,timezone
 from collections import defaultdict
 from typing import Dict, Any
 
@@ -13,6 +13,13 @@ def get_effective_target_value(habit: Habit) -> int:
         return habit.total_sessions
 
     return habit.target_value if habit.target_value else 1
+
+
+def normalize_points(points: int | None) -> int:
+    if points is None:
+        return 10
+
+    return max(int(points), 0)
 
 
 def is_habit_due_on_day(habit: Habit, target_date: date) -> bool:
@@ -41,14 +48,12 @@ def get_habit_progress_snapshot(
     user_id: int,
     target_date: date
 ):
-    start = datetime.combine(target_date, datetime.min.time())
-    end = start + timedelta(days=1)
+
     effective_target_value = get_effective_target_value(habit)
     completed_value = db.query(func.sum(HabitLog.value_completed)).filter(
         HabitLog.habit_id == habit.id,
         HabitLog.user_id == user_id,
-        HabitLog.completed_at >= start,
-        HabitLog.completed_at < end
+        func.date(HabitLog.completed_at) == target_date  
     ).scalar() or 0
     is_due = is_habit_due_on_day(habit, target_date)
 
@@ -70,8 +75,10 @@ def get_habit_progress_snapshot(
 
 
 def create_habit(db: Session,habit: HabitCreate, user_id: int):
+    habit_data = habit.dict()
+    habit_data["points"] = normalize_points(habit_data.get("points"))
     new_habit = Habit(
-    **habit.dict(),
+    **habit_data,
     user_id=user_id
     )
     db.add(new_habit)
@@ -86,6 +93,8 @@ def update_habit(db: Session,habit_id: int,update_data: HabitUpdate,user_id: int
     if not habit:
         return None
     update_dict = update_data.dict(exclude_unset=True)
+    if "points" in update_dict:
+        update_dict["points"] = normalize_points(update_dict["points"])
     for field, value in update_dict.items():
         setattr(habit, field, value)
     db.commit()
@@ -124,6 +133,7 @@ def get_habits(db: Session, user_id: int):
             "target_value": habit.target_value,
             "effective_target_value": progress_snapshot["effective_target_value"],
             "category": habit.category,
+            "points": normalize_points(habit.points),
             "repeat": habit.repeat,        
             "days": habit.days,            
             "scheduled_time": habit.scheduled_time,
@@ -152,78 +162,6 @@ def create_log(db: Session, log_data : HabitLogCreate,user_id:int):
     db.commit()
     db.refresh(log)
     return log
-def get_streak(db: Session, user_id: int):
-    today = date.today()
-    habits = db.query(Habit).filter(Habit.user_id == user_id).all()
-    completion_threshold = 0.8
-
-    if not habits:
-        return {
-            "current_streak": 0,
-            "longest_streak": 0,
-            "completion_threshold": completion_threshold,
-            "completion_ratio_today": 0.0,
-            "perfect_day_today": False
-        }
-
-    def get_day_progress(day: date):
-        return get_daily_progress(db, user_id, day)
-
-    # Calculate current streak
-    check_day = today - timedelta(days=1)
-    current_streak = 0
-    
-    # Check backwards from yesterday
-    for _ in range(365):
-        progress_data = get_day_progress(check_day)
-        scheduled_habits = progress_data["total_habits"]
-        day_progress = progress_data["daily_progress"]
-
-        if scheduled_habits == 0:
-            check_day -= timedelta(days=1)
-            continue
-        
-        if day_progress >= completion_threshold * 100:
-            current_streak += 1
-            check_day -= timedelta(days=1)
-        else:
-            break
-            
-    # Add today to the streak if today is already completed
-    today_progress = get_day_progress(today)
-    if today_progress["total_habits"] > 0 and today_progress["daily_progress"] >= completion_threshold * 100:
-        current_streak += 1
-    
-    # Calculate longest streak in last 365 days
-    longest_streak = 0
-    temp_streak = 0
-    start_day = today - timedelta(days=365)
-    
-    for day_offset in range(365):
-        check_day = start_day + timedelta(days=day_offset)
-        progress_data = get_day_progress(check_day)
-        scheduled_habits = progress_data["total_habits"]
-        day_progress = progress_data["daily_progress"]
-
-        if scheduled_habits == 0:
-            continue
-        
-        if day_progress >= completion_threshold * 100:
-            temp_streak += 1
-            longest_streak = max(longest_streak, temp_streak)
-        else:
-            temp_streak = 0
-    
-    # Get today's progress for display
-    today_progress = get_day_progress(today)
-    
-    return {
-        "current_streak": current_streak,
-        "longest_streak": longest_streak,
-        "completion_threshold": completion_threshold,
-        "completion_ratio_today": round((today_progress["daily_progress"] or 0) / 100, 2),
-        "perfect_day_today": today_progress["total_habits"] > 0 and today_progress["daily_progress"] >= 100
-    }
 def get_daily_progress(db: Session,user_id:int,target_date: date):
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     if not habits:
@@ -313,7 +251,7 @@ def get_momentum(db: Session,user_id: int):
         if delta >= 10:
             message = "Excellent push today. You are accelerating."
         else:
-            message = "Strong day. Keep the streak warm and finish clean."
+            message = "Strong day. Keep the momentum warm and finish clean."
     elif today_progress >= 55:
         if delta >= 10:
             message = "Nice rebound today. You are moving in the right direction."
@@ -346,7 +284,7 @@ def get_momentum(db: Session,user_id: int):
         "window_average": round(window_average,2)
     }
 def get_last_7_days_data(db, habit_id):
-    today = datetime.utcnow().date()
+    today = date.today()
     start_date = today - timedelta(days=6)
     habit = db.query(Habit).filter(Habit.id == habit_id).first()
 
@@ -387,17 +325,20 @@ from datetime import date
 
 def get_dashboard_data(db: Session, user_id: int):
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
+    total_possible_points = 0 
 
     today_progress_data = get_daily_progress(db, user_id, date.today())
     completed_today = today_progress_data["completed_habits"]
     today_progress = int(today_progress_data["daily_progress"])
     total_habits = today_progress_data["total_habits"]
+    today_points = 0
 
     if len(habits) == 0:
         return {
             "today_progress": 0,
             "total_habits": 0,
             "completed_today": 0,
+            "today_points": 0,
             "categories": [],
             "momentum": {
                 "score": 0.0,
@@ -420,6 +361,8 @@ def get_dashboard_data(db: Session, user_id: int):
         
         if not progress["is_due"]:
             continue
+        points = normalize_points(habit.points or 10)   # 👈 ADD THIS
+        total_possible_points += points      
 
         category = (habit.category or "Uncategorized").strip()
 
@@ -430,6 +373,7 @@ def get_dashboard_data(db: Session, user_id: int):
         # ✅ check if THIS habit is completely finished today
         if progress["completed"]:
             category_map[category]["completed"] += 1
+            today_points += points
 
     # 📊 convert to list
     categories = [
@@ -453,6 +397,8 @@ def get_dashboard_data(db: Session, user_id: int):
         "today_progress": today_progress,
         "total_habits": total_habits,
         "completed_today": completed_today,
+        "today_points": today_points,
+        "total_points": total_possible_points,
         "categories": categories,
         "momentum": {
             "score": momentum_data["momentum_score"],
@@ -481,7 +427,8 @@ def get_recent_completed_habits(db: Session, user_id: int, limit: int = 10):
             "value_completed": log.value_completed,
             "completed_at": log.completed_at,
             "target_type": log.habit.target_type,
-            "target_value": log.habit.target_value
+            "target_value": log.habit.target_value,
+            "points": normalize_points(log.habit.points)
         })
     return result
 
@@ -495,7 +442,7 @@ def get_category_summary(db: Session, user_id: int, category: str):
         return {"week": [], "consistency": 0, "habits": []}
 
     habit_ids = [h.id for h in habits]
-    today = datetime.utcnow().date()
+    today = date.today()
     start_date = today - timedelta(days=6)
 
     logs = (
@@ -541,6 +488,7 @@ def get_category_summary(db: Session, user_id: int, category: str):
             "title": h.title,
             "target_type": h.target_type,
             "target_value": h.target_value,
+            "points": normalize_points(h.points),
             "remaining_value": progress["remaining_value"],
             "completed_today": progress["completed"],
             "is_due_today": progress["is_due"],
@@ -571,7 +519,7 @@ def toggle_sub_habit(db: Session, sub_habit_id: int):
     
     sub.completed_today = not sub.completed_today
     if sub.completed_today:
-        sub.last_completed_at = datetime.utcnow()
+        sub.last_completed_at = datetime.now()
     
     db.commit()
     db.refresh(sub)

@@ -9,6 +9,7 @@ from app.models import User
 from fastapi.middleware.cors import CORSMiddleware
 from app.models import HabitLog
 from datetime import datetime, date
+from sqlalchemy import inspect, text
 import os
 
 
@@ -33,6 +34,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_points_column():
+    inspector = inspect(engine)
+    habit_columns = {column["name"] for column in inspector.get_columns("habits")}
+
+    if "points" not in habit_columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE habits ADD COLUMN points INTEGER DEFAULT 10")
+            )
+
+
+ensure_points_column()
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 @app.get("/")
@@ -100,18 +115,6 @@ def delete_habit(
         raise HTTPException(status_code=404, detail="Habit not found")
 
     return {"message": "Habit deleted successfully"}
-@app.get("/streak",response_model = schemas.StreakResponse)
-def get_streak(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-    
-):
-    streak =  crud.get_streak(db,current_user.id)
-    if not streak:
-        raise HTTPException(status_code=404, detail="Habit not found")
-
-    return streak
-
 # Sub-habit endpoints
 @app.post("/habits/{habit_id}/subhabits", response_model=schemas.SubHabitResponse)
 def add_sub_habit(

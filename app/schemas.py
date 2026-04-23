@@ -24,6 +24,7 @@ class HabitCreate(BaseModel):
     target_value : int
     scheduled_time: Optional[time] = None
     category : str
+    points: Optional[int] = 10
     repeat: str  
     days: Optional[List[str]] = []
     is_session: bool = False
@@ -53,6 +54,7 @@ class HabitResponse(BaseModel):
     effective_target_value: Optional[int] = 0
     scheduled_time: time | None = None
     category: Optional[str] = None
+    points: Optional[int] = 10
     repeat: Optional[str] = "daily"
     days: Optional[List[str]] = []
     is_due_today: Optional[bool] = True
@@ -88,20 +90,13 @@ class HabitUpdate(BaseModel):
     target_value : Optional[int]= None
     scheduled_time: Optional[time]= None
     category : Optional[str]= None
+    points: Optional[int]= None
     repeat: Optional[str] = None
     days: Optional[List[str]] = None
     is_session: Optional[bool] = None
     focus_time: Optional[int] = None
     break_time: Optional[int] = None
     total_sessions: Optional[int] = None
-class StreakResponse(BaseModel):
-
-    current_streak: int
-    longest_streak: int
-    completion_threshold: float
-    completion_ratio_today: float
-    perfect_day_today: bool
-
 class MomentumResponse(BaseModel):
     score: float
     state: str
@@ -114,7 +109,6 @@ class HabitDashboard(BaseModel):
     id: int
     title: str
     progress: float
-    current_streak: int
 class CategorySummary(BaseModel):
     name: str
     completed: int
@@ -125,6 +119,8 @@ class DashboardResponse(BaseModel):
     today_progress: int
     total_habits: int
     completed_today: int
+    today_points: int = 0
+    total_points: int 
     categories : List[CategorySummary]
 class UserRegister(BaseModel):
     username: str
@@ -141,6 +137,7 @@ class RecentCompletedHabit(BaseModel):
     completed_at: datetime
     target_type: str
     target_value: int
+    points: Optional[int] = 10
     
     class Config:
         from_attributes = True
