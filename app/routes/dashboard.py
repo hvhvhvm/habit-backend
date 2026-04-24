@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.crud import get_dashboard_data
-from app.schemas import DashboardResponse
+from app.schemas import DashboardResponse, StreakResponse
 from app.core.security import get_current_user   
-from app.crud import get_last_7_days_data,get_heatmap_data
-from sqlalchemy.orm import Session
-from fastapi import Depends
-from app.models import Habit
-from app.crud import get_category_summary
+from app.crud import (
+    get_dashboard_data, 
+    get_last_7_days_data, 
+    get_heatmap_data, 
+    get_category_summary, 
+    get_global_streak,
+    get_habits
+)
 from app.models import User
+from datetime import date
 
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -39,15 +42,7 @@ def get_category_routine_summary(
 
 @router.get("/my-habits")
 def get_my_habits(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
-    habits = db.query(Habit).filter(Habit.user_id == current_user.id).all()
-
-    return [
-        {
-            "id": h.id,
-            "name": h.title
-        }
-        for h in habits
-    ]
+    return get_habits(db, current_user.id)
 @router.get("/heatmap/")
 def get_heatmap(
     db: Session = Depends(get_db),
@@ -55,4 +50,6 @@ def get_heatmap(
     
 ):
     return get_heatmap_data(db,current_user.id)
-    
+@router.get("/streak",response_model=StreakResponse)
+def get_streak_api(db:Session = Depends(get_db),current_user = Depends(get_current_user)):
+    return get_global_streak(db,current_user.id,date.today())

@@ -116,12 +116,15 @@ class CategorySummary(BaseModel):
     percent: int
 class DashboardResponse(BaseModel):
     momentum : MomentumResponse
-    today_progress: int
+    today_progress: float
     total_habits: int
     completed_today: int
     today_points: int = 0
     total_points: int 
     categories : List[CategorySummary]
+    streak: int = 0
+class StreakResponse(BaseModel):
+    streak: int
 class UserRegister(BaseModel):
     username: str
     email: str

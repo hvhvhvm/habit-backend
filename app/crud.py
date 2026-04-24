@@ -151,6 +151,59 @@ def get_habits(db: Session, user_id: int):
     db.commit()
 
     return result
+def get_global_streak(db: Session, user_id: int, today: date):
+    habits = db.query(Habit).filter(Habit.user_id == user_id).all()
+    if not habits:
+        return {"streak": 0}
+
+    logs = db.query(
+        HabitLog.habit_id,
+        func.date(HabitLog.completed_at).label("day"),
+        func.sum(HabitLog.value_completed).label("total")
+    ).filter(
+        HabitLog.user_id == user_id,
+        func.date(HabitLog.completed_at) <= today
+    ).group_by(
+        HabitLog.habit_id,
+        func.date(HabitLog.completed_at)
+    ).all()
+
+    log_map = defaultdict(lambda: defaultdict(int))
+    for habit_id, day, total in logs:
+        if isinstance(day, str):
+            log_map[day][habit_id] = total
+        else:
+            log_map[day.isoformat()][habit_id] = total
+
+    streak = 0
+    current_date = today
+
+    while True:
+        date_str = current_date.isoformat()
+        due_habit_count = 0
+        completed_habits = 0
+
+        for habit in habits:
+            if not is_habit_due_on_day(habit, current_date):
+                continue
+
+            due_habit_count += 1
+            effective_target_value = get_effective_target_value(habit)
+            completed_value = log_map[date_str][habit.id]
+
+            if effective_target_value > 0 and completed_value >= effective_target_value:
+                completed_habits += 1
+
+        if due_habit_count == 0:
+            break
+        if completed_habits < due_habit_count:
+            break
+
+        streak += 1
+        current_date -= timedelta(days=1)
+
+    return {"streak": streak}
+    
 def create_log(db: Session, log_data : HabitLogCreate,user_id:int):
     log = HabitLog(
         habit_id = log_data.habit_id,
@@ -197,25 +250,67 @@ def get_heatmap_data(db: Session, user_id: int, days: int = 365):
     """Get daily progress data for heatmap visualization"""
     today = date.today()
     
-    # Calculate start date to align with Monday
-    # today.weekday() returns 0 for Monday, 6 for Sunday
-    # We want to go back 'days' days, and then further back to the nearest Monday
     start_date = today - timedelta(days=days - 1)
     monday_offset = start_date.weekday()
     start_date = start_date - timedelta(days=monday_offset)
     
     num_days = (today - start_date).days + 1
     
+    habits = db.query(Habit).filter(Habit.user_id == user_id).all()
+    
+    logs = db.query(
+        HabitLog.habit_id,
+        func.date(HabitLog.completed_at).label("day"),
+        func.sum(HabitLog.value_completed).label("total")
+    ).filter(
+        HabitLog.user_id == user_id,
+        func.date(HabitLog.completed_at) >= start_date
+    ).group_by(
+        HabitLog.habit_id,
+        func.date(HabitLog.completed_at)
+    ).all()
+    
+    log_map = defaultdict(lambda: defaultdict(int))
+    for habit_id, day, total in logs:
+        if isinstance(day, str):
+            log_map[day][habit_id] = total
+        else:
+            log_map[day.isoformat()][habit_id] = total
+
     heatmap_data = []
     for i in range(num_days):
         check_date = start_date + timedelta(days=i)
-        progress_data = get_daily_progress(db, user_id, check_date)
+        date_str = check_date.isoformat()
+        
+        total_progress = 0
+        due_habit_count = 0
+        completed_habits = 0
+        
+        for habit in habits:
+            if not is_habit_due_on_day(habit, check_date):
+                continue
+                
+            effective_target_value = get_effective_target_value(habit)
+            completed_value = log_map[date_str][habit.id]
+            
+            if effective_target_value > 0:
+                progress_percent = min(int((completed_value / effective_target_value) * 100), 100)
+            else:
+                progress_percent = 0
+                
+            if effective_target_value > 0 and completed_value >= effective_target_value:
+                completed_habits += 1
+                
+            total_progress += progress_percent
+            due_habit_count += 1
+                
+        daily_progress = total_progress / due_habit_count if due_habit_count else 0
         
         heatmap_data.append({
-            "date": check_date.isoformat(),
-            "count": progress_data["daily_progress"],
-            "completed_habits": progress_data["completed_habits"],
-            "total_habits": progress_data["total_habits"]
+            "date": date_str,
+            "count": round(daily_progress, 2),
+            "completed_habits": completed_habits,
+            "total_habits": due_habit_count
         })
     
     return heatmap_data
@@ -392,6 +487,7 @@ def get_dashboard_data(db: Session, user_id: int):
         ]
 
     momentum_data = get_momentum(db, user_id)
+    streak_data = get_global_streak(db, user_id, today)
 
     return {
         "today_progress": today_progress,
@@ -400,6 +496,7 @@ def get_dashboard_data(db: Session, user_id: int):
         "today_points": today_points,
         "total_points": total_possible_points,
         "categories": categories,
+        "streak": streak_data["streak"],
         "momentum": {
             "score": momentum_data["momentum_score"],
             "state": momentum_data["momentum_state"],
