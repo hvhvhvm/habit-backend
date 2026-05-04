@@ -19,13 +19,14 @@ class UserResponse(BaseModel):
         from_attributes = True
     
 class HabitCreate(BaseModel):
+
     title: str
-    target_type : TargetType
-    target_value : int
+    target_type : TargetType 
+    target_value : int = 1
     scheduled_time: Optional[time] = None
     category : str
     points: Optional[int] = 10
-    repeat: str  
+    repeat: str 
     days: Optional[List[str]] = []
     is_session: bool = False
     focus_time: Optional[int] = None

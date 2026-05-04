@@ -39,11 +39,18 @@ Base.metadata.create_all(bind=engine)
 def ensure_points_column():
     inspector = inspect(engine)
     habit_columns = {column["name"] for column in inspector.get_columns("habits")}
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
 
     if "points" not in habit_columns:
         with engine.begin() as connection:
             connection.execute(
                 text("ALTER TABLE habits ADD COLUMN points INTEGER DEFAULT 10")
+            )
+
+    if "journey_start_date" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN journey_start_date DATE")
             )
 
 

@@ -4,7 +4,7 @@ from sqlalchemy import func, or_
 from app.database import get_db
 from app.models import User
 from app.schemas import UserRegister
-from app.core.security import hash_password,verify_password,create_access_token
+from app.core.security import hash_password,verify_password,create_access_token,get_current_user
 from fastapi.security import OAuth2PasswordRequestForm
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -29,7 +29,6 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="Email or username already registered")
 
-
     new_user = User(
         username=username,
         email=email,
@@ -40,7 +39,13 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    return {"message": "User created"}
+
+    access_token = create_access_token({"sub": str(new_user.id)})
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 @router.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -70,4 +75,21 @@ def login(
     return {
         "access_token": access_token,
         "token_type": "bearer"
+    }
+@router.post("/complete-onboarding")
+def complete_onboarding(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    current_user.onboarding_done = True
+    db.commit()
+    return {"message": "Onboarding completed"}
+@router.get("/me")
+def get_me(current_user = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "onboarding_done": current_user.onboarding_done,
+        "username":current_user.username,
+        "journey_start_date": str(current_user.journey_start_date) if current_user.journey_start_date else None
     }

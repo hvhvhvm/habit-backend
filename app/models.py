@@ -1,4 +1,4 @@
-from sqlalchemy import Column,Time, Integer, String, ForeignKey,Boolean, DateTime
+from sqlalchemy import Column,Time, Integer, String, ForeignKey,Boolean, Date, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -9,6 +9,8 @@ class User(Base):
     username = Column(String, nullable=False)
     email = Column(String, unique = True, index = True)
     password_hash = Column(String,nullable=False)
+    onboarding_done = Column(Boolean, default=False)
+    journey_start_date = Column(Date, nullable=True)
     habits = relationship("Habit", back_populates="user")
     
 class Habit(Base):
@@ -23,7 +25,7 @@ class Habit(Base):
     scheduled_time = Column(Time, nullable=True)
     category = Column(String, nullable=True)
     points = Column(Integer, default=10)
-
+    
     user_id = Column(Integer, ForeignKey("users.id"))
 
 

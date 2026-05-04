@@ -434,6 +434,7 @@ def get_dashboard_data(db: Session, user_id: int):
             "total_habits": 0,
             "completed_today": 0,
             "today_points": 0,
+            "total_points": 0,
             "categories": [],
             "momentum": {
                 "score": 0.0,
