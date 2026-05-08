@@ -50,13 +50,23 @@ def get_habit_progress_snapshot(
 ):
 
     effective_target_value = get_effective_target_value(habit)
+
+    start_of_day = datetime.combine(
+        target_date,
+        datetime.min.time(),
+        tzinfo=timezone.utc
+    )
+
+    end_of_day = start_of_day + timedelta(days=1)
+
     completed_value = db.query(func.sum(HabitLog.value_completed)).filter(
         HabitLog.habit_id == habit.id,
         HabitLog.user_id == user_id,
-        func.date(HabitLog.completed_at) == target_date  
+        HabitLog.completed_at >= start_of_day,
+        HabitLog.completed_at < end_of_day
     ).scalar() or 0
-    is_due = is_habit_due_on_day(habit, target_date)
 
+    is_due = is_habit_due_on_day(habit, target_date)
     if effective_target_value > 0:
         progress_percent = min(int((completed_value / effective_target_value) * 100), 100)
     else:
