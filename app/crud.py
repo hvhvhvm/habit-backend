@@ -63,7 +63,8 @@ def get_habit_progress_snapshot(
         progress_percent = 0
 
     remaining_value = max(effective_target_value - completed_value, 0)
-
+    print("TARGET DATE:", target_date)
+    print("COMPLETED VALUE:", completed_value)
     return {
         "effective_target_value": effective_target_value,
         "completed_value": completed_value,
@@ -114,7 +115,7 @@ def delete_habit(db: Session,habit_id:int,user_id: int):
 
 def get_habits(db: Session, user_id: int):
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
-    today = date.today()
+    today = datetime.now(timezone.utc)
     result = []
 
     for habit in habits:
@@ -248,7 +249,7 @@ def get_daily_progress(db: Session,user_id:int,target_date: date):
     }
 def get_heatmap_data(db: Session, user_id: int, days: int = 365):
     """Get daily progress data for heatmap visualization"""
-    today = date.today()
+    today = datetime.now(timezone.utc)
     
     start_date = today - timedelta(days=days - 1)
     monday_offset = start_date.weekday()
@@ -316,7 +317,7 @@ def get_heatmap_data(db: Session, user_id: int, days: int = 365):
     return heatmap_data
 
 def get_momentum(db: Session,user_id: int):
-    today = date.today()
+    today = datetime.now(timezone.utc)
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
     
@@ -379,7 +380,7 @@ def get_momentum(db: Session,user_id: int):
         "window_average": round(window_average,2)
     }
 def get_last_7_days_data(db, habit_id):
-    today = date.today()
+    today = datetime.now(timezone.utc)
     start_date = today - timedelta(days=6)
     habit = db.query(Habit).filter(Habit.id == habit_id).first()
 
@@ -422,7 +423,7 @@ def get_dashboard_data(db: Session, user_id: int):
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     total_possible_points = 0 
 
-    today_progress_data = get_daily_progress(db, user_id, date.today())
+    today_progress_data = get_daily_progress(db, user_id, datetime.now(timezone.utc))
     completed_today = today_progress_data["completed_habits"]
     today_progress = int(today_progress_data["daily_progress"])
     total_habits = today_progress_data["total_habits"]
@@ -449,7 +450,7 @@ def get_dashboard_data(db: Session, user_id: int):
 
     category_map = defaultdict(lambda: {"completed": 0, "total": 0, "progress_sum": 0})
 
-    today = date.today()
+    today = datetime.now(timezone.utc)
 
     # 🔁 LOOP THROUGH EACH HABIT
     for habit in habits:
@@ -540,7 +541,7 @@ def get_category_summary(db: Session, user_id: int, category: str):
         return {"week": [], "consistency": 0, "habits": []}
 
     habit_ids = [h.id for h in habits]
-    today = date.today()
+    today = datetime.now(timezone.utc)
     start_date = today - timedelta(days=6)
 
     logs = (
@@ -617,7 +618,7 @@ def toggle_sub_habit(db: Session, sub_habit_id: int):
     
     sub.completed_today = not sub.completed_today
     if sub.completed_today:
-        sub.last_completed_at = datetime.now()
+        sub.last_completed_at = datetime.now(timezone.utc)
     
     db.commit()
     db.refresh(sub)

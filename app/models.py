@@ -1,6 +1,7 @@
 from sqlalchemy import Column,Time, Integer, String, ForeignKey,Boolean, Date, DateTime
 from sqlalchemy.orm import relationship
-from datetime import datetime
+
+from datetime import datetime, timedelta, date, timezone
 from app.database import Base
 from sqlalchemy import JSON
 class User(Base):
@@ -29,7 +30,7 @@ class Habit(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
 
 
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
     repeat = Column(String)   
     days = Column(JSON)
     is_session = Column(Boolean, default=False)
@@ -75,6 +76,6 @@ class HabitLog(Base):
 
     value_completed = Column(Integer, default=0)
 
-    completed_at = Column(DateTime, default=datetime.now)
+    completed_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     habit = relationship("Habit", back_populates="logs")

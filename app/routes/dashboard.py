@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import DashboardResponse, StreakResponse ,HabitCreate
-from app.core.security import get_current_user   
+from app.core.security import get_current_user
+from datetime import datetime, timedelta, date, timezone   
 from app.models import Habit,HabitLog
 from datetime import date, timedelta
 from sqlalchemy import func
@@ -57,7 +58,7 @@ def get_heatmap(
     return get_heatmap_data(db,current_user.id)
 @router.get("/streak",response_model=StreakResponse)
 def get_streak_api(db:Session = Depends(get_db),current_user = Depends(get_current_user)):
-    return get_global_streak(db,current_user.id,date.today())
+    return get_global_streak(db,current_user.id,datetime.now(timezone.utc))
 
 @router.get("/journey")
 def get_journey(
@@ -74,7 +75,7 @@ def start_journey(
     db: Session = Depends(get_db)
 ):
     if current_user.journey_start_date is None:
-        current_user.journey_start_date = date.today()
+        current_user.journey_start_date = datetime.now(timezone.utc)
         db.commit()
         db.refresh(current_user)
 
@@ -117,7 +118,7 @@ async def get_progress_history(
             "days": []
         }
 
-    today = date.today()
+    today = datetime.now(timezone.utc)
     start_date = current_user.journey_start_date
     window_start = max(start_date, today - timedelta(days=days - 1))
     result = []
