@@ -30,7 +30,7 @@ class Habit(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
 
 
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     repeat = Column(String)   
     days = Column(JSON)
     is_session = Column(Boolean, default=False)
@@ -76,6 +76,6 @@ class HabitLog(Base):
 
     value_completed = Column(Integer, default=0)
 
-    completed_at = Column(DateTime, default=datetime.now(timezone.utc))
+    completed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     habit = relationship("Habit", back_populates="logs")

@@ -85,11 +85,12 @@ def get_logs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    today = date.today()
+    today = crud.today_in_app_timezone()
+    start_of_day, end_of_day = crud.local_day_utc_bounds(today)
     logs = db.query(HabitLog).filter(
         HabitLog.user_id == current_user.id,
-        HabitLog.completed_at >= datetime.combine(today,datetime.min.time()),
-        HabitLog.completed_at <= datetime.combine(today,datetime.max.time())
+        HabitLog.completed_at >= start_of_day,
+        HabitLog.completed_at < end_of_day
     ).all()
 
     return logs

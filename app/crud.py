@@ -6,6 +6,32 @@ from sqlalchemy import func
 from datetime import datetime, timedelta,date,timezone
 from collections import defaultdict
 from typing import Dict, Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+try:
+    APP_TIMEZONE = ZoneInfo("Asia/Kolkata")
+except ZoneInfoNotFoundError:
+    APP_TIMEZONE = timezone(timedelta(hours=5, minutes=30))
+
+
+def today_in_app_timezone() -> date:
+    return datetime.now(APP_TIMEZONE).date()
+
+
+def coerce_to_date(value: date | datetime) -> date:
+    if isinstance(value, datetime):
+        if value.tzinfo:
+            return value.astimezone(APP_TIMEZONE).date()
+        return value.replace(tzinfo=timezone.utc).astimezone(APP_TIMEZONE).date()
+    return value
+
+
+def local_day_utc_bounds(target_date: date | datetime) -> tuple[datetime, datetime]:
+    day = coerce_to_date(target_date)
+    local_start = datetime.combine(day, datetime.min.time(), tzinfo=APP_TIMEZONE)
+    local_end = local_start + timedelta(days=1)
+    return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
 
 
 def get_effective_target_value(habit: Habit) -> int:
@@ -23,6 +49,7 @@ def normalize_points(points: int | None) -> int:
 
 
 def is_habit_due_on_day(habit: Habit, target_date: date) -> bool:
+    target_date = coerce_to_date(target_date)
     repeat_type = (habit.repeat or "daily").strip().lower()
 
     if repeat_type == "custom":
@@ -49,15 +76,10 @@ def get_habit_progress_snapshot(
     target_date: date
 ):
 
+    target_date = coerce_to_date(target_date)
     effective_target_value = get_effective_target_value(habit)
 
-    start_of_day = datetime.combine(
-        target_date,
-        datetime.min.time(),
-        tzinfo=timezone.utc
-    )
-
-    end_of_day = start_of_day + timedelta(days=1)
+    start_of_day, end_of_day = local_day_utc_bounds(target_date)
 
     completed_value = db.query(func.sum(HabitLog.value_completed)).filter(
         HabitLog.habit_id == habit.id,
@@ -73,8 +95,6 @@ def get_habit_progress_snapshot(
         progress_percent = 0
 
     remaining_value = max(effective_target_value - completed_value, 0)
-    print("TARGET DATE:", target_date)
-    print("COMPLETED VALUE:", completed_value)
     return {
         "effective_target_value": effective_target_value,
         "completed_value": completed_value,
@@ -125,7 +145,7 @@ def delete_habit(db: Session,habit_id:int,user_id: int):
 
 def get_habits(db: Session, user_id: int):
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
-    today = datetime.now(timezone.utc)
+    today = today_in_app_timezone()
     result = []
 
     for habit in habits:
@@ -133,7 +153,7 @@ def get_habits(db: Session, user_id: int):
         
         # Reset sub-habits if they were completed before today
         for sub in habit.sub_habits:
-            if sub.completed_today and sub.last_completed_at and sub.last_completed_at.date() < today:
+            if sub.completed_today and sub.last_completed_at and coerce_to_date(sub.last_completed_at) < today:
                 sub.completed_today = False
                 db.add(sub)
 
@@ -163,6 +183,7 @@ def get_habits(db: Session, user_id: int):
 
     return result
 def get_global_streak(db: Session, user_id: int, today: date):
+    today = coerce_to_date(today)
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     if not habits:
         return {"streak": 0}
@@ -221,12 +242,12 @@ def create_log(db: Session, log_data : HabitLogCreate,user_id:int):
         value_completed = log_data.value_completed,
         user_id = user_id 
     )
-    print("LOG VALUE:", log_data.value_completed)
     db.add(log)
     db.commit()
     db.refresh(log)
     return log
 def get_daily_progress(db: Session,user_id:int,target_date: date):
+    target_date = coerce_to_date(target_date)
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     if not habits:
         return {
@@ -259,7 +280,7 @@ def get_daily_progress(db: Session,user_id:int,target_date: date):
     }
 def get_heatmap_data(db: Session, user_id: int, days: int = 365):
     """Get daily progress data for heatmap visualization"""
-    today = datetime.now(timezone.utc)
+    today = today_in_app_timezone()
     
     start_date = today - timedelta(days=days - 1)
     monday_offset = start_date.weekday()
@@ -327,7 +348,7 @@ def get_heatmap_data(db: Session, user_id: int, days: int = 365):
     return heatmap_data
 
 def get_momentum(db: Session,user_id: int):
-    today = datetime.now(timezone.utc)
+    today = today_in_app_timezone()
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
     
@@ -390,7 +411,7 @@ def get_momentum(db: Session,user_id: int):
         "window_average": round(window_average,2)
     }
 def get_last_7_days_data(db, habit_id):
-    today = datetime.now(timezone.utc)
+    today = today_in_app_timezone()
     start_date = today - timedelta(days=6)
     habit = db.query(Habit).filter(Habit.id == habit_id).first()
 
@@ -418,7 +439,7 @@ def get_last_7_days_data(db, habit_id):
     completed_days = 0
 
     for day in week_data:
-        if day["value"] >= habit.target:
+        if day["value"] >= get_effective_target_value(habit):
             completed_days += 1
 
     consistency = (completed_days / 7) * 100
@@ -433,7 +454,7 @@ def get_dashboard_data(db: Session, user_id: int):
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     total_possible_points = 0 
 
-    today_progress_data = get_daily_progress(db, user_id, datetime.now(timezone.utc))
+    today_progress_data = get_daily_progress(db, user_id, today_in_app_timezone())
     completed_today = today_progress_data["completed_habits"]
     today_progress = int(today_progress_data["daily_progress"])
     total_habits = today_progress_data["total_habits"]
@@ -460,7 +481,7 @@ def get_dashboard_data(db: Session, user_id: int):
 
     category_map = defaultdict(lambda: {"completed": 0, "total": 0, "progress_sum": 0})
 
-    today = datetime.now(timezone.utc)
+    today = today_in_app_timezone()
 
     # 🔁 LOOP THROUGH EACH HABIT
     for habit in habits:
@@ -551,7 +572,7 @@ def get_category_summary(db: Session, user_id: int, category: str):
         return {"week": [], "consistency": 0, "habits": []}
 
     habit_ids = [h.id for h in habits]
-    today = datetime.now(timezone.utc)
+    today = today_in_app_timezone()
     start_date = today - timedelta(days=6)
 
     logs = (
@@ -588,7 +609,7 @@ def get_category_summary(db: Session, user_id: int, category: str):
         
         # Reset sub-habits if they were completed before today
         for sub in h.sub_habits:
-            if sub.completed_today and sub.last_completed_at and sub.last_completed_at.date() < today:
+            if sub.completed_today and sub.last_completed_at and coerce_to_date(sub.last_completed_at) < today:
                 sub.completed_today = False
                 db.add(sub)
 

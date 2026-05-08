@@ -15,7 +15,8 @@ from app.crud import (
     get_global_streak,
     get_habits,
     get_habit_progress_snapshot,
-    is_habit_due_on_day
+    is_habit_due_on_day,
+    today_in_app_timezone
 )
 from app.models import User
 from datetime import date
@@ -58,7 +59,7 @@ def get_heatmap(
     return get_heatmap_data(db,current_user.id)
 @router.get("/streak",response_model=StreakResponse)
 def get_streak_api(db:Session = Depends(get_db),current_user = Depends(get_current_user)):
-    return get_global_streak(db,current_user.id,datetime.now(timezone.utc))
+    return get_global_streak(db,current_user.id,today_in_app_timezone())
 
 @router.get("/journey")
 def get_journey(
@@ -75,7 +76,7 @@ def start_journey(
     db: Session = Depends(get_db)
 ):
     if current_user.journey_start_date is None:
-        current_user.journey_start_date = datetime.now(timezone.utc)
+        current_user.journey_start_date = today_in_app_timezone()
         db.commit()
         db.refresh(current_user)
 
@@ -118,7 +119,7 @@ async def get_progress_history(
             "days": []
         }
 
-    today = datetime.now(timezone.utc)
+    today = today_in_app_timezone()
     start_date = current_user.journey_start_date
     window_start = max(start_date, today - timedelta(days=days - 1))
     result = []
