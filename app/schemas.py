@@ -21,6 +21,7 @@ class UserResponse(BaseModel):
 class HabitCreate(BaseModel):
 
     title: str
+    time_block: str = "default"
     target_type : TargetType 
     target_value : int = 1
     scheduled_time: Optional[time] = None
@@ -32,6 +33,7 @@ class HabitCreate(BaseModel):
     focus_time: Optional[int] = None
     break_time: Optional[int] = None
     total_sessions: Optional[int] = None
+    routine_id: int | None = None
 class SubHabitBase(BaseModel):
     title: str
 
@@ -46,10 +48,20 @@ class SubHabitResponse(SubHabitBase):
 
     class Config:
         from_attributes = True
+class RoutineCreate(BaseModel):
+    name: str
+    emoji: str = "✨"
+class RoutineResponse(BaseModel):
+    id: int
+    name: str
+    emoji: str
 
+    class Config:
+        from_attributes = True
 class HabitResponse(BaseModel):
     id : int
     title: str
+    time_block: str
     target_type : TargetType
     target_value : int
     effective_target_value: Optional[int] = 0
@@ -68,6 +80,7 @@ class HabitResponse(BaseModel):
     break_time: Optional[int] = None
     total_sessions: Optional[int] = None
     sub_habits: List[SubHabitResponse] = []
+    routine_id: int | None = None
 
     class Config:
         from_attributes = True
@@ -87,6 +100,7 @@ class HabitLogResponse(BaseModel):
         
 class HabitUpdate(BaseModel):
     title: Optional[str]= None
+    time_block: Optional[str] = None
     target_type : Optional[TargetType]= None
     target_value : Optional[int]= None
     scheduled_time: Optional[time]= None
@@ -98,6 +112,7 @@ class HabitUpdate(BaseModel):
     focus_time: Optional[int] = None
     break_time: Optional[int] = None
     total_sessions: Optional[int] = None
+    routine_id: Optional[int] = None
 class MomentumResponse(BaseModel):
     score: float
     state: str

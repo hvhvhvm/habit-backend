@@ -54,6 +54,18 @@ def ensure_points_column():
                 text("ALTER TABLE users ADD COLUMN journey_start_date DATE")
             )
 
+    if "time_block" not in habit_columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE habits ADD COLUMN time_block VARCHAR DEFAULT 'default'")
+            )
+
+    if "routine_id" not in habit_columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE habits ADD COLUMN routine_id INTEGER")
+            )
+
 
 ensure_points_column()
 app.include_router(auth.router)
@@ -80,6 +92,8 @@ def get_habits(
 ):
     return crud.get_habits(db, user_id=current_user.id)
 
+
+
 @app.get("/logs")
 def get_logs(
     db: Session = Depends(get_db),
@@ -101,29 +115,8 @@ def create_log(
     current_user: User = Depends(get_current_user) 
 ):
     return crud.create_log(db, logs, user_id=current_user.id)
-@app.patch("/habits/{habit_id}")
-def update_habit(
-    habit_id: int,
-    update_data: schemas.HabitUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    updated_habit = crud.update_habit(db, habit_id, update_data, current_user.id)
-    if not updated_habit:
-        raise HTTPException(status_code=404, detail="Habit not found")
 
-    return updated_habit
-@app.delete("/habits/{habit_id}")
-def delete_habit(
-    habit_id:int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    deleted_habit = crud.delete_habit(db,habit_id,current_user.id)
-    if not deleted_habit:
-        raise HTTPException(status_code=404, detail="Habit not found")
 
-    return {"message": "Habit deleted successfully"}
 # Sub-habit endpoints
 @app.post("/habits/{habit_id}/subhabits", response_model=schemas.SubHabitResponse)
 def add_sub_habit(
@@ -166,13 +159,7 @@ def delete_sub_habit(
         raise HTTPException(status_code=404, detail="Sub-habit not found")
     crud.delete_sub_habit(db, sub_habit_id)
     return {"message": "Sub-habit deleted"}
-@app.get("/habits/progress")
-def daily_progress(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    progress = crud.get_momentum(db,current_user.id)
-    return progress
+
 
 @app.get("/habits/recent-completed", response_model=list[schemas.RecentCompletedHabit])
 def get_recent_completed_habits(
@@ -181,12 +168,73 @@ def get_recent_completed_habits(
     current_user: User = Depends(get_current_user)
 ):
     return crud.get_recent_completed_habits(db, current_user.id, limit)
+@app.get("/habits/progress")
+def daily_progress(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    progress = crud.get_momentum(db,current_user.id)
+    return progress
+@app.patch("/habits/{habit_id}")
+def update_habit(
+    habit_id: int,
+    update_data: schemas.HabitUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    updated_habit = crud.update_habit(db, habit_id, update_data, current_user.id)
+    if not updated_habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
 
+    return updated_habit
+@app.delete("/habits/{habit_id}")
+def delete_habit(
+    habit_id:int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    deleted_habit = crud.delete_habit(db,habit_id,current_user.id)
+    if not deleted_habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+
+    return {"message": "Habit deleted successfully"}
 @app.get("/heatmap")
 def get_heatmap_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     return crud.get_heatmap_data(db, current_user.id)
-
-
+@app.post("/routines", response_model=schemas.RoutineResponse)
+def post_routine(
+    routine: schemas.RoutineCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return crud.create_routine(
+        db=db,
+        user_id=current_user.id,
+        routine_data=routine
+    )
+@app.get(
+    "/routines",
+    response_model=list[schemas.RoutineResponse]
+)
+def get_routines(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return crud.get_routines(
+        db=db,
+        user_id=current_user.id
+    )
+@app.get("/routines/{routine_id}")
+def get_routine_detail(
+    routine_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return crud.get_routine_detail(
+        db,
+        routine_id,
+        current_user.id
+    )

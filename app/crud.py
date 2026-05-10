@@ -1,11 +1,12 @@
 from sqlalchemy.orm import Session
-from app.models import User,Habit,HabitLog,SubHabit
-from app.schemas import HabitCreate,HabitLogCreate,HabitUpdate,SubHabitCreate
+from app.models import User,Habit,HabitLog,SubHabit,Routine
+from app.schemas import HabitCreate,HabitLogCreate,HabitUpdate,SubHabitCreate,RoutineCreate
 from datetime import datetime, date, timedelta
 from sqlalchemy import func
 from datetime import datetime, timedelta,date,timezone
 from collections import defaultdict
 from typing import Dict, Any
+from fastapi import HTTPException
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -164,6 +165,7 @@ def get_habits(db: Session, user_id: int):
             "target_value": habit.target_value,
             "effective_target_value": progress_snapshot["effective_target_value"],
             "category": habit.category,
+            "time_block": habit.time_block,
             "points": normalize_points(habit.points),
             "repeat": habit.repeat,        
             "days": habit.days,            
@@ -177,11 +179,103 @@ def get_habits(db: Session, user_id: int):
             "focus_time": habit.focus_time,
             "break_time": habit.break_time,
             "total_sessions": habit.total_sessions,
+            "routine_id": habit.routine_id,
             "sub_habits": habit.sub_habits
         })
     db.commit()
 
     return result
+def create_routine(
+    db: Session,
+    user_id: int,
+    routine_data: RoutineCreate
+):
+    routine = Routine(
+        name=routine_data.name,
+        emoji=routine_data.emoji,
+        user_id=user_id
+    )
+
+    db.add(routine)
+    db.commit()
+    db.refresh(routine)
+
+    return routine
+def get_user_routines(
+    db: Session,
+    user_id: int
+):
+    return db.query(Routine).filter(
+        Routine.user_id == user_id
+    ).all()
+def get_routine_detail(
+    db: Session,
+    routine_id: int,
+    user_id: int
+):
+    routine = db.query(Routine).filter(
+        Routine.id == routine_id,
+        Routine.user_id == user_id
+    ).first()
+
+    if not routine:
+        raise HTTPException(
+            status_code=404,
+            detail="Routine not found"
+        )
+
+    habits = db.query(Habit).filter(
+        Habit.routine_id == routine_id,
+        Habit.user_id == user_id
+    ).all()
+
+    today = today_in_app_timezone()
+    habit_data = []
+    completed_count = 0
+
+    for habit in habits:
+        progress = get_habit_progress_snapshot(db, habit, user_id, today)
+
+        if progress["completed"]:
+            completed_count += 1
+
+        habit_data.append({
+            "id": habit.id,
+            "title": habit.title,
+            "target_type": habit.target_type,
+            "target_value": habit.target_value,
+            "effective_target_value": progress["effective_target_value"],
+            "points": normalize_points(habit.points),
+            "remaining_value": progress["remaining_value"],
+            "completed_today": progress["completed"],
+            "completed_today_value": progress["completed_value"],
+            "progress_percent": progress["progress_percent"],
+            "is_due_today": progress["is_due"],
+            "is_session": habit.is_session,
+            "focus_time": habit.focus_time,
+            "break_time": habit.break_time,
+            "total_sessions": habit.total_sessions,
+            "routine_id": habit.routine_id,
+            "sub_habits": habit.sub_habits,
+            "repeat": habit.repeat,
+            "days": habit.days,
+        })
+
+    consistency = (
+        (completed_count / len(habits)) * 100
+        if habits else 0
+    )
+
+    return {
+        "routine": routine,
+        "habits": habit_data,
+        "consistency": consistency
+    }
+def get_routines(
+    db: Session,
+    user_id: int
+):
+    return get_user_routines(db, user_id)
 def get_global_streak(db: Session, user_id: int, today: date):
     today = coerce_to_date(today)
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()

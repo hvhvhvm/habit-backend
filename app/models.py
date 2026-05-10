@@ -26,7 +26,7 @@ class Habit(Base):
     scheduled_time = Column(Time, nullable=True)
     category = Column(String, nullable=True)
     points = Column(Integer, default=10)
-    
+    time_block = Column(String, default="default")
     user_id = Column(Integer, ForeignKey("users.id"))
 
 
@@ -38,6 +38,7 @@ class Habit(Base):
     focus_time = Column(Integer, nullable=True)
     break_time = Column(Integer, nullable=True)
     total_sessions = Column(Integer, nullable=True)
+    routine_id = Column(Integer, ForeignKey("routines.id"), nullable=True)
 
     user = relationship("User", back_populates="habits")
     logs = relationship(
@@ -79,3 +80,15 @@ class HabitLog(Base):
     completed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     habit = relationship("Habit", back_populates="logs")
+class Routine(Base):
+    __tablename__ = "routines"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    name = Column(String, nullable=False)
+
+    emoji = Column(String, default="✨")
+
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    user = relationship("User")
