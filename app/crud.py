@@ -271,6 +271,33 @@ def get_routine_detail(
         "habits": habit_data,
         "consistency": consistency
     }
+def delete_routine(
+    db: Session,
+    routine_id: int,
+    user_id: int
+):
+    routine = db.query(Routine).filter(
+        Routine.id == routine_id,
+        Routine.user_id == user_id
+    ).first()
+
+    if not routine:
+        return None
+
+    # Delete all habits that belong to this routine
+    # (cascade will handle their logs and sub-habits)
+    habits = db.query(Habit).filter(
+        Habit.routine_id == routine_id,
+        Habit.user_id == user_id
+    ).all()
+
+    for habit in habits:
+        db.delete(habit)
+
+    db.delete(routine)
+    db.commit()
+    return routine
+
 def get_routines(
     db: Session,
     user_id: int

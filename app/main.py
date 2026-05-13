@@ -238,3 +238,14 @@ def get_routine_detail(
         routine_id,
         current_user.id
     )
+
+@app.delete("/routines/{routine_id}")
+def delete_routine(
+    routine_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    deleted = crud.delete_routine(db, routine_id, current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Routine not found")
+    return {"message": "Routine and all its habits deleted successfully"}
