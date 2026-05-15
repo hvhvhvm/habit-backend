@@ -1,5 +1,5 @@
-venv/
-__pycache__/
 .env
+__pycache__/
+*.pyc
+venv/
 *.db
-node_modules/

@@ -93,3 +93,13 @@ def get_me(current_user = Depends(get_current_user)):
         "username":current_user.username,
         "journey_start_date": str(current_user.journey_start_date) if current_user.journey_start_date else None
     }
+
+@router.post("/refresh")
+def refresh_token(current_user = Depends(get_current_user)):
+    """Issue a fresh token with a new expiry. Call this on app load to extend sessions."""
+    new_token = create_access_token({"sub": str(current_user.id)})
+    return {
+        "access_token": new_token,
+        "token_type": "bearer"
+    }
+

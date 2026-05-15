@@ -13,6 +13,7 @@ from sqlalchemy import inspect, text
 import os
 
 
+
 app = FastAPI()
 
 default_origins = [
@@ -74,6 +75,19 @@ app.include_router(dashboard.router)
 def root():
     print("ROOT ENDPOINT HIT")
     return {"message": "Habit Tracker API is running"}
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    """Diagnostic endpoint to verify database connectivity and type."""
+    from app.database import SQLALCHEMY_DATABASE_URL
+    is_sqlite = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
+    user_count = db.query(User).count()
+    return {
+        "status": "ok",
+        "database_type": "SQLite ⚠️ (ephemeral — data lost on restart!)" if is_sqlite else "PostgreSQL ✅ (persistent)",
+        "user_count": user_count,
+        "warning": "SQLite on Render = data loss on every restart/deploy!" if is_sqlite else None,
+    }
 
 @app.post("/habits")
 def create_habit(
