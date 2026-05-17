@@ -50,7 +50,8 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
         return {
             "access_token": access_token,
             "token_type": "bearer",
-            "user_id": new_user.id
+            "user_id": new_user.id,
+            "username": new_user.username
         }
     except HTTPException:
         raise
@@ -89,7 +90,8 @@ def login(
         return {
             "access_token": access_token,
             "token_type": "bearer",
-            "user_id": db_user.id
+            "user_id": db_user.id,
+            "username": db_user.username
         }
     except HTTPException:
         raise
@@ -137,4 +139,3 @@ def refresh_token(current_user = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Token refresh error: {e}")
         raise HTTPException(status_code=500, detail="Token refresh failed")
-

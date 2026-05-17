@@ -230,14 +230,8 @@ def get_full_dashboard(
         .all()
     )
 
-    routines = (
-        db.query(Habit.category)
-        .filter(Habit.user_id == current_user.id)
-        .distinct()
-        .all()
-    )
-
-    routines = [r[0] for r in routines if r[0]]
+    from app.crud import get_routines
+    routines = get_routines(db, current_user.id)
 
     return {
         "dashboard": dashboard_data,

@@ -31,12 +31,12 @@ if _is_sqlite:
             "Data WILL be lost on every restart. "
             "Set the DATABASE_URL environment variable to a PostgreSQL connection string."
         )
-    print(f"⚠️  DATABASE: SQLite → {DEFAULT_SQLITE_PATH}")
+    print(f"DATABASE: SQLite - {DEFAULT_SQLITE_PATH}")
 else:
     # Mask the connection string for safety (don't log passwords)
     _masked = SQLALCHEMY_DATABASE_URL.split("@")[-1] if "@" in SQLALCHEMY_DATABASE_URL else "configured"
-    logger.info("✅ DATABASE: PostgreSQL → %s", _masked)
-    print(f"✅ DATABASE: PostgreSQL → {_masked}")
+    logger.info("DATABASE: PostgreSQL - %s", _masked)
+    print(f"DATABASE: PostgreSQL - {_masked}")
 
 # ── Engine configuration ──
 connect_args = {}

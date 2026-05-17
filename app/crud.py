@@ -74,20 +74,23 @@ def get_habit_progress_snapshot(
     db: Session,
     habit: Habit,
     user_id: int,
-    target_date: date
+    target_date: date,
+    log_sums: dict | None = None
 ):
 
     target_date = coerce_to_date(target_date)
     effective_target_value = get_effective_target_value(habit)
 
-    start_of_day, end_of_day = local_day_utc_bounds(target_date)
-
-    completed_value = db.query(func.sum(HabitLog.value_completed)).filter(
-        HabitLog.habit_id == habit.id,
-        HabitLog.user_id == user_id,
-        HabitLog.completed_at >= start_of_day,
-        HabitLog.completed_at < end_of_day
-    ).scalar() or 0
+    if log_sums is not None:
+        completed_value = log_sums.get((habit.id, target_date), 0)
+    else:
+        start_of_day, end_of_day = local_day_utc_bounds(target_date)
+        completed_value = db.query(func.sum(HabitLog.value_completed)).filter(
+            HabitLog.habit_id == habit.id,
+            HabitLog.user_id == user_id,
+            HabitLog.completed_at >= start_of_day,
+            HabitLog.completed_at < end_of_day
+        ).scalar() or 0
 
     is_due = is_habit_due_on_day(habit, target_date)
     if effective_target_value > 0:
@@ -107,7 +110,7 @@ def get_habit_progress_snapshot(
 
 
 def create_habit(db: Session,habit: HabitCreate, user_id: int):
-    habit_data = habit.dict()
+    habit_data = habit.model_dump() if hasattr(habit, "model_dump") else habit.dict()
     habit_data["points"] = normalize_points(habit_data.get("points"))
     new_habit = Habit(
     **habit_data,
@@ -147,10 +150,27 @@ def delete_habit(db: Session,habit_id:int,user_id: int):
 def get_habits(db: Session, user_id: int):
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     today = today_in_app_timezone()
+
+    # Pre-fetch today's logs to avoid N+1 queries
+    start_utc, end_utc = local_day_utc_bounds(today)
+    logs = db.query(HabitLog).filter(
+        HabitLog.user_id == user_id,
+        HabitLog.completed_at >= start_utc,
+        HabitLog.completed_at < end_utc
+    ).all()
+
+    log_sums = defaultdict(int)
+    for log in logs:
+        dt = log.completed_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local_date = dt.astimezone(APP_TIMEZONE).date()
+        log_sums[(log.habit_id, local_date)] += log.value_completed
+
     result = []
 
     for habit in habits:
-        progress_snapshot = get_habit_progress_snapshot(db, habit, user_id, today)
+        progress_snapshot = get_habit_progress_snapshot(db, habit, user_id, today, log_sums=log_sums)
         
         # Reset sub-habits if they were completed before today
         for sub in habit.sub_habits:
@@ -201,6 +221,36 @@ def create_routine(
     db.refresh(routine)
 
     return routine
+
+def create_routine_with_habits(
+    db: Session,
+    user_id: int,
+    routine_data
+):
+    routine = Routine(
+        name=routine_data.name,
+        emoji=routine_data.emoji,
+        user_id=user_id
+    )
+    db.add(routine)
+    db.flush()
+
+    habits = []
+    for habit in routine_data.habits:
+        habit_data = habit.model_dump() if hasattr(habit, "model_dump") else habit.dict()
+        habit_data["points"] = normalize_points(habit_data.get("points"))
+        habit_data["routine_id"] = routine.id
+        habits.append(Habit(**habit_data, user_id=user_id))
+
+    if habits:
+        db.add_all(habits)
+
+    db.commit()
+    db.refresh(routine)
+    for habit in habits:
+        db.refresh(habit)
+
+    return {"routine": routine, "habits": habits}
 def get_user_routines(
     db: Session,
     user_id: int
@@ -230,11 +280,28 @@ def get_routine_detail(
     ).all()
 
     today = today_in_app_timezone()
+
+    # Pre-fetch today's logs to avoid N+1 queries
+    start_utc, end_utc = local_day_utc_bounds(today)
+    logs = db.query(HabitLog).filter(
+        HabitLog.user_id == user_id,
+        HabitLog.completed_at >= start_utc,
+        HabitLog.completed_at < end_utc
+    ).all()
+
+    log_sums = defaultdict(int)
+    for log in logs:
+        dt = log.completed_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local_date = dt.astimezone(APP_TIMEZONE).date()
+        log_sums[(log.habit_id, local_date)] += log.value_completed
+
     habit_data = []
     completed_count = 0
 
     for habit in habits:
-        progress = get_habit_progress_snapshot(db, habit, user_id, today)
+        progress = get_habit_progress_snapshot(db, habit, user_id, today, log_sums=log_sums)
 
         if progress["completed"]:
             completed_count += 1
@@ -367,7 +434,7 @@ def create_log(db: Session, log_data : HabitLogCreate,user_id:int):
     db.commit()
     db.refresh(log)
     return log
-def get_daily_progress(db: Session,user_id:int,target_date: date):
+def get_daily_progress(db: Session,user_id:int,target_date: date, log_sums: dict | None = None):
     target_date = coerce_to_date(target_date)
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     if not habits:
@@ -382,7 +449,7 @@ def get_daily_progress(db: Session,user_id:int,target_date: date):
     completed_habits = 0
 
     for habit in habits:
-        progress_snapshot = get_habit_progress_snapshot(db, habit, user_id, target_date)
+        progress_snapshot = get_habit_progress_snapshot(db, habit, user_id, target_date, log_sums=log_sums)
         if not progress_snapshot["is_due"]:
             continue
 
@@ -466,16 +533,16 @@ def get_heatmap_data(db: Session, user_id: int, days: int = 365):
 
     return heatmap_data
 
-def get_momentum(db: Session, user_id: int):
+def get_momentum(db: Session, user_id: int, log_sums: dict | None = None):
     
-    today = date.today()
+    today = today_in_app_timezone()
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
     
 
-    today_progress = get_daily_progress(db, user_id, today)["daily_progress"]
-    yesterday_progress = get_daily_progress(db, user_id, yesterday)["daily_progress"]
-    two_days_progress = get_daily_progress(db, user_id, two_days_ago)["daily_progress"]
+    today_progress = get_daily_progress(db, user_id, today, log_sums=log_sums)["daily_progress"]
+    yesterday_progress = get_daily_progress(db, user_id, yesterday, log_sums=log_sums)["daily_progress"]
+    two_days_progress = get_daily_progress(db, user_id, two_days_ago, log_sums=log_sums)["daily_progress"]
     window_average = (
         today_progress +
         yesterday_progress +
@@ -574,10 +641,32 @@ from collections import defaultdict
 from datetime import date
 
 def get_dashboard_data(db: Session, user_id: int):
+    today = today_in_app_timezone()
+    yesterday = today - timedelta(days=1)
+    two_days_ago = today - timedelta(days=2)
+
+    # 1. Bulk query HabitLog for the 3-day window to avoid query explosion
+    start_utc, _ = local_day_utc_bounds(two_days_ago)
+    _, end_utc = local_day_utc_bounds(today)
+
+    logs = db.query(HabitLog).filter(
+        HabitLog.user_id == user_id,
+        HabitLog.completed_at >= start_utc,
+        HabitLog.completed_at < end_utc
+    ).all()
+
+    log_sums = defaultdict(int)
+    for log in logs:
+        dt = log.completed_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local_date = dt.astimezone(APP_TIMEZONE).date()
+        log_sums[(log.habit_id, local_date)] += log.value_completed
+
     habits = db.query(Habit).filter(Habit.user_id == user_id).all()
     total_possible_points = 0 
 
-    today_progress_data = get_daily_progress(db, user_id, today_in_app_timezone())
+    today_progress_data = get_daily_progress(db, user_id, today, log_sums=log_sums)
     completed_today = today_progress_data["completed_habits"]
     today_progress = int(today_progress_data["daily_progress"])
     total_habits = today_progress_data["total_habits"]
@@ -604,15 +693,13 @@ def get_dashboard_data(db: Session, user_id: int):
 
     category_map = defaultdict(lambda: {"completed": 0, "total": 0, "progress_sum": 0})
 
-    today = today_in_app_timezone()
-
     # 🔁 LOOP THROUGH EACH HABIT
     for habit in habits:
-        progress = get_habit_progress_snapshot(db, habit, user_id, today)
+        progress = get_habit_progress_snapshot(db, habit, user_id, today, log_sums=log_sums)
         
         if not progress["is_due"]:
             continue
-        points = normalize_points(habit.points or 10)   # 👈 ADD THIS
+        points = normalize_points(habit.points or 10)
         total_possible_points += points      
 
         category = (habit.category or "Uncategorized").strip()
@@ -642,7 +729,7 @@ def get_dashboard_data(db: Session, user_id: int):
             {"name": "No Data", "completed": 0, "total": 0, "percent": 0}
         ]
 
-    momentum_data = get_momentum(db, user_id)
+    momentum_data = get_momentum(db, user_id, log_sums=log_sums)
     streak_data = get_global_streak(db, user_id, today)
 
     return {
@@ -725,10 +812,25 @@ def get_category_summary(db: Session, user_id: int, category: str):
     completed_days = sum(1 for d in week_data if d["value"] > 0)
     consistency = (completed_days / 7) * 100
 
+    # Pre-fetch today's logs for category habits
+    start_utc, end_utc = local_day_utc_bounds(today)
+    today_logs = db.query(HabitLog).filter(
+        HabitLog.user_id == user_id,
+        HabitLog.completed_at >= start_utc,
+        HabitLog.completed_at < end_utc
+    ).all()
+
+    log_sums = defaultdict(int)
+    for log in today_logs:
+        dt = log.completed_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local_date = dt.astimezone(APP_TIMEZONE).date()
+        log_sums[(log.habit_id, local_date)] += log.value_completed
 
     habit_data = []
     for h in habits:
-        progress = get_habit_progress_snapshot(db, h, user_id, today)
+        progress = get_habit_progress_snapshot(db, h, user_id, today, log_sums=log_sums)
         
         # Reset sub-habits if they were completed before today
         for sub in h.sub_habits:

@@ -128,6 +128,13 @@ def create_log(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user) 
 ):
+    habit = db.query(models.Habit).filter(
+        models.Habit.id == logs.habit_id,
+        models.Habit.user_id == current_user.id
+    ).first()
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+
     return crud.create_log(db, logs, user_id=current_user.id)
 
 
@@ -225,6 +232,18 @@ def post_routine(
     current_user: User = Depends(get_current_user)
 ):
     return crud.create_routine(
+        db=db,
+        user_id=current_user.id,
+        routine_data=routine
+    )
+
+@app.post("/routines/with-habits")
+def post_routine_with_habits(
+    routine: schemas.RoutineWithHabitsCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return crud.create_routine_with_habits(
         db=db,
         user_id=current_user.id,
         routine_data=routine

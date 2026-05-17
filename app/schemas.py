@@ -51,6 +51,9 @@ class SubHabitResponse(SubHabitBase):
 class RoutineCreate(BaseModel):
     name: str
     emoji: str = "✨"
+class RoutineWithHabitsCreate(RoutineCreate):
+    habits: List[HabitCreate] = []
+
 class RoutineResponse(BaseModel):
     id: int
     name: str
