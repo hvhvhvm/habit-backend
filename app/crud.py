@@ -443,50 +443,52 @@ def get_heatmap_data(db: Session, user_id: int, days: int = 365):
             if not is_habit_due_on_day(habit, check_date):
                 continue
                 
-            effective_target_value = get_effective_target_value(habit)
-            completed_value = log_map[date_str][habit.id]
+            habit_progress = log_map.get(date_str, {}).get(habit.id, 0)
+            effective_target = get_effective_target_value(habit)
             
-            if effective_target_value > 0:
-                progress_percent = min(int((completed_value / effective_target_value) * 100), 100)
+            if effective_target > 0:
+                progress_percent = min((habit_progress / effective_target) * 100, 100)
             else:
-                progress_percent = 0
-                
-            if effective_target_value > 0 and completed_value >= effective_target_value:
-                completed_habits += 1
-                
+                progress_percent = 0 if habit_progress == 0 else 100
+            
             total_progress += progress_percent
             due_habit_count += 1
-                
+            if progress_percent >= 100:
+                completed_habits += 1
+
         daily_progress = total_progress / due_habit_count if due_habit_count else 0
-        
+
         heatmap_data.append({
             "date": date_str,
             "count": round(daily_progress, 2),
-            "completed_habits": completed_habits,
             "total_habits": due_habit_count
         })
-    
+
     return heatmap_data
 
-def get_momentum(db: Session,user_id: int):
-    today = today_in_app_timezone()
+def get_momentum(db: Session, user_id: int):
+    
+    today = date.today()
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
     
-    today_progress = get_daily_progress(db,user_id,today)["daily_progress"]
-    yesterday_progress = get_daily_progress(db,user_id,yesterday)["daily_progress"]
-    two_days_progress = get_daily_progress(db,user_id,two_days_ago)["daily_progress"]
+
+    today_progress = get_daily_progress(db, user_id, today)["daily_progress"]
+    yesterday_progress = get_daily_progress(db, user_id, yesterday)["daily_progress"]
+    two_days_progress = get_daily_progress(db, user_id, two_days_ago)["daily_progress"]
+    window_average = (
+        today_progress +
+        yesterday_progress +
+        two_days_progress
+    ) / 3
     
     momentum_score = (
         today_progress * 0.5 + 
-        yesterday_progress * 0.3 +
+        yesterday_progress * 0.3 + 
         two_days_progress * 0.2
     )
-
+    
     delta = today_progress - yesterday_progress
-    window_average = (
-        today_progress + yesterday_progress + two_days_progress
-    ) / 3
 
     if momentum_score >= 75:
         state = "RISING"

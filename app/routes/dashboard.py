@@ -110,7 +110,7 @@ def create_habit(
 async def get_progress_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    days: int = Query(90, ge=1, le=365),
+    days: int = Query(30, ge=1, le=365),
 ):
     if current_user.journey_start_date is None:
         return {
@@ -206,4 +206,43 @@ async def get_progress_history(
         "journey_started": True,
         "journey_start_date": str(start_date),
         "days": result
+    }
+
+@router.get("/full")
+def get_full_dashboard(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    
+    dashboard_data = get_dashboard_data(db, current_user.id)
+
+    habits = get_habits(db, current_user.id)
+
+    heatmap = get_heatmap_data(db, current_user.id)
+
+    recent_completed = (
+        db.query(HabitLog)
+        .filter(
+            HabitLog.user_id == current_user.id
+        )
+        .order_by(HabitLog.completed_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    routines = (
+        db.query(Habit.category)
+        .filter(Habit.user_id == current_user.id)
+        .distinct()
+        .all()
+    )
+
+    routines = [r[0] for r in routines if r[0]]
+
+    return {
+        "dashboard": dashboard_data,
+        "habits": habits,
+        "heatmap": heatmap,
+        "recent_completed": recent_completed,
+        "routines": routines
     }
