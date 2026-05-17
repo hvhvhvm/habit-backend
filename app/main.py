@@ -98,6 +98,20 @@ def create_habit(
     print(habit.dict())
     return crud.create_habit(db, habit, user_id=current_user.id)
 
+@app.post("/habits/bulk")
+def create_habits_bulk(
+    habits: list[schemas.HabitCreate],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        created = crud.create_habits_bulk(db, habits, user_id=current_user.id)
+        db.commit()
+        return {"created": len(created)}
+    except Exception:
+        db.rollback()
+        raise
+
 
 @app.get("/habits",response_model = list[schemas.HabitResponse])
 def get_habits(

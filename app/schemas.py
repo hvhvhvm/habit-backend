@@ -54,6 +54,10 @@ class RoutineCreate(BaseModel):
 class RoutineWithHabitsCreate(RoutineCreate):
     habits: List[HabitCreate] = []
 
+class OnboardingComplete(BaseModel):
+    name: Optional[str] = None
+    habits: List[HabitCreate] = []
+
 class RoutineResponse(BaseModel):
     id: int
     name: str

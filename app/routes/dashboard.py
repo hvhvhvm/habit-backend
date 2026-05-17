@@ -210,6 +210,7 @@ async def get_progress_history(
 
 @router.get("/full")
 def get_full_dashboard(
+    include_heatmap: bool = Query(True),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -218,7 +219,7 @@ def get_full_dashboard(
 
     habits = get_habits(db, current_user.id)
 
-    heatmap = get_heatmap_data(db, current_user.id)
+    heatmap = get_heatmap_data(db, current_user.id) if include_heatmap else []
 
     recent_completed = (
         db.query(HabitLog)

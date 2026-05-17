@@ -120,6 +120,19 @@ def create_habit(db: Session,habit: HabitCreate, user_id: int):
     db.commit()
     db.refresh(new_habit)
     return new_habit
+
+def create_habits_bulk(db: Session, habits: list[HabitCreate], user_id: int):
+    new_habits = []
+    for habit in habits:
+        habit_data = habit.model_dump() if hasattr(habit, "model_dump") else habit.dict()
+        habit_data["points"] = normalize_points(habit_data.get("points"))
+        new_habits.append(Habit(**habit_data, user_id=user_id))
+
+    if new_habits:
+        db.add_all(new_habits)
+        db.flush()
+
+    return new_habits
 def update_habit(db: Session,habit_id: int,update_data: HabitUpdate,user_id: int):
     habit = db.query(Habit).filter(
         Habit.id == habit_id,

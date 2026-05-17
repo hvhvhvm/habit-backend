@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from app.database import get_db
 from app.models import User
-from app.schemas import UserRegister
+from app.schemas import UserRegister, OnboardingComplete
 from app.core.security import hash_password,verify_password,create_access_token,get_current_user
 from fastapi.security import OAuth2PasswordRequestForm
 import logging
@@ -101,13 +101,19 @@ def login(
 
 @router.post("/complete-onboarding")
 def complete_onboarding(
+    payload: OnboardingComplete | None = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     try:
+        if payload and payload.name:
+            current_user.username = payload.name.strip() or current_user.username
+        if payload and payload.habits:
+            from app.crud import create_habits_bulk
+            create_habits_bulk(db, payload.habits, current_user.id)
         current_user.onboarding_done = True
         db.commit()
-        return {"message": "Onboarding completed"}
+        return {"message": "Onboarding completed", "created_habits": len(payload.habits) if payload else 0}
     except Exception as e:
         logger.error(f"Onboarding error: {e}")
         db.rollback()
